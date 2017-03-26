@@ -30,7 +30,7 @@ fn filter_paths(dir_list: fs::ReadDir) -> Vec<PathBuf> {
             match file_extension {
                 Some(file_extension) => {
                     let extension = file_extension.to_string_lossy().to_lowercase();
-                    //println!("Extension: {}",path.extension() );
+                    //println!("Extension: {}",extension );
                     if extension == "jpg" || extension == "png" || extension == "gif" || extension == "jpeg" {
                         filtered_path_list.push( other_path );
                     }
@@ -47,8 +47,8 @@ fn filter_paths(dir_list: fs::ReadDir) -> Vec<PathBuf> {
 }
 
 fn calculatePhash (path : &PathBuf) -> img_hash::ImageHash {
-    let image = image::open(path).unwrap();
-    let hash = ImageHash::hash(&image, 8, HashType::Gradient);
+    let image_result = image::open(path).unwrap();
+    let hash = ImageHash::hash(&image_result, 8, HashType::Gradient);
     return hash
 }
 
@@ -69,14 +69,24 @@ fn main() {
     let image_list = folderWalk(&Path::new("./test_images"));
     let mut path_hash_list:Vec<phash_list_str> = Vec::new();
 
-    println!("Image list: {:?}",image_list );
+    println!("Generating pHashes");
     // send off some threads to crunch phashes for these files
     for path in &image_list {
         let hash = calculatePhash(path);
         path_hash_list.push( phash_list_str{path:path.to_path_buf(), phash:hash} );
     }
+    for entry in &path_hash_list {
+        println!("hash: {:?} path: {:?} size: {:?}", entry.phash.to_base64(), entry.path, entry.phash.size());
+    }
 
-    for entry in path_hash_list {
-        println!("hash: {:?} path: {:?}", entry.phash.to_base64(), entry.path);
+    // running difference calculation
+    for entry in &path_hash_list {
+        for tmpentry in &path_hash_list {
+            let difference = entry.phash.dist_ratio(&tmpentry.phash);
+            print!("-");
+            if difference < 10.0 {
+                print!("+");
+            }
+        }
     }
 }
