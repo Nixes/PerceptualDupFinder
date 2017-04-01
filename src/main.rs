@@ -9,6 +9,7 @@ use std::sync::mpsc::channel;
 use std::path::Path;
 use std::path::PathBuf;
 use std::fs;
+use image::GenericImage;
 use img_hash::{ImageHash, HashType};
 
 struct phash_list_str {
@@ -46,12 +47,6 @@ fn filter_paths(dir_list: fs::ReadDir) -> Vec<PathBuf> {
     filtered_path_list
 }
 
-fn calculatePhash (path : &PathBuf) -> img_hash::ImageHash {
-    let image_result = image::open(path).unwrap();
-    let hash = ImageHash::hash(&image_result, 8, HashType::Gradient);
-    return hash
-}
-
 fn calculateDifference (first: phash_list_str, second: phash_list_str) {
     println!("% Difference: {}", first.phash.dist_ratio(&second.phash));
 }
@@ -72,20 +67,35 @@ fn main() {
     println!("Generating pHashes");
     // send off some threads to crunch phashes for these files
     for path in &image_list {
-        let hash = calculatePhash(path);
-        path_hash_list.push( phash_list_str{path:path.to_path_buf(), phash:hash} );
+        let image_result = image::open(path);
+
+        match image_result {
+            Ok(image) => {
+                let hash = ImageHash::hash(&image, 8, HashType::Gradient);
+                path_hash_list.push( phash_list_str{path:path.to_path_buf(), phash:hash} );
+            },
+            Err(e) => println!("error parsing image: {:?}", e),
+        }
+
+        //println!("Dimensions  {:?} path: {:?}", image_result.dimensions(), path);
+        //let hash = ImageHash::hash(&image_result, 8, HashType::Gradient);
+        //path_hash_list.push( phash_list_str{path:path.to_path_buf(), phash:hash} );
     }
+    println!("Showing Hashes in List");
     for entry in &path_hash_list {
         println!("hash: {:?} path: {:?} size: {:?}", entry.phash.to_base64(), entry.path, entry.phash.size());
     }
 
     // running difference calculation
-    for entry in &path_hash_list {
-        for tmpentry in &path_hash_list {
-            let difference = entry.phash.dist_ratio(&tmpentry.phash);
-            print!("-");
-            if difference < 10.0 {
-                print!("+");
+    println!("Calculating differences");
+    for (i,entry) in path_hash_list.iter().enumerate() {
+        for (j,tmpentry) in path_hash_list.iter().enumerate() {
+            if (i != j) {
+                let difference = entry.phash.dist_ratio(&tmpentry.phash);
+                if difference < 0.1 {
+                    //print!("+");
+                    println!("File1 {:?}\nFile2 {:?}\n",entry.path,  &tmpentry.path);
+                }
             }
         }
     }
