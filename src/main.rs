@@ -1,6 +1,8 @@
 extern crate image;
 extern crate img_hash;
 
+use std::env;
+
 // multithreading
 extern crate threadpool;
 use threadpool::ThreadPool;
@@ -11,6 +13,8 @@ use std::path::PathBuf;
 use std::fs;
 use image::GenericImage;
 use img_hash::{ImageHash, HashType};
+// benchmarking
+use std::time::Instant;
 
 struct phash_list_str {
     path : PathBuf,
@@ -60,43 +64,55 @@ fn folderWalk(folder_path:&Path)-> Vec<PathBuf> {
 }
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 1 {
+        println!("Location: {:?}", args[1]);
 
-    let image_list = folderWalk(&Path::new("./test_images"));
-    let mut path_hash_list:Vec<phash_list_str> = Vec::new();
+        let now = Instant::now();
 
-    println!("Generating pHashes");
-    // send off some threads to crunch phashes for these files
-    for path in &image_list {
-        let image_result = image::open(path);
+        let image_list = folderWalk(&Path::new(&args[1]));
+        let mut path_hash_list:Vec<phash_list_str> = Vec::new();
 
-        match image_result {
-            Ok(image) => {
-                let hash = ImageHash::hash(&image, 8, HashType::Gradient);
-                path_hash_list.push( phash_list_str{path:path.to_path_buf(), phash:hash} );
-            },
-            Err(e) => println!("error parsing image: {:?}", e),
+        println!("Generating pHashes");
+        // send off some threads to crunch phashes for these files
+        for path in &image_list {
+            let image_result = image::open(path);
+
+            match image_result {
+                Ok(image) => {
+                    let hash = ImageHash::hash(&image, 18, HashType::DCT);
+                    path_hash_list.push( phash_list_str{path:path.to_path_buf(), phash:hash} );
+                },
+                Err(e) => println!("error parsing image: {:?}", e),
+            }
+
+            //println!("Dimensions  {:?} path: {:?}", image_result.dimensions(), path);
+            //let hash = ImageHash::hash(&image_result, 8, HashType::Gradient);
+            //path_hash_list.push( phash_list_str{path:path.to_path_buf(), phash:hash} );
         }
+        //println!("Showing Hashes in List");
+        //for entry in &path_hash_list {
+        //    println!("hash: {:?} path: {:?} size: {:?}", entry.phash.to_base64(), entry.path, entry.phash.size());
+        //}
 
-        //println!("Dimensions  {:?} path: {:?}", image_result.dimensions(), path);
-        //let hash = ImageHash::hash(&image_result, 8, HashType::Gradient);
-        //path_hash_list.push( phash_list_str{path:path.to_path_buf(), phash:hash} );
-    }
-    println!("Showing Hashes in List");
-    for entry in &path_hash_list {
-        println!("hash: {:?} path: {:?} size: {:?}", entry.phash.to_base64(), entry.path, entry.phash.size());
-    }
-
-    // running difference calculation
-    println!("Calculating differences");
-    for (i,entry) in path_hash_list.iter().enumerate() {
-        for (j,tmpentry) in path_hash_list.iter().enumerate() {
-            if (i != j) {
-                let difference = entry.phash.dist_ratio(&tmpentry.phash);
-                if difference < 0.1 {
-                    //print!("+");
-                    println!("File1 {:?}\nFile2 {:?}\n",entry.path,  &tmpentry.path);
+        // running difference calculation
+        let mut num_dupes:i32 = 0;
+        println!("Calculating differences");
+        for (i,entry) in path_hash_list.iter().enumerate() {
+            for (j,tmpentry) in path_hash_list.iter().enumerate() {
+                if (i != j) {
+                    let difference = entry.phash.dist_ratio(&tmpentry.phash);
+                    if difference < 0.05 {
+                        //print!("+");
+                        println!("File1 {:?}\nFile2 {:?}\n Diff: {:?}\n",entry.path,  &tmpentry.path, difference);
+                        num_dupes += 1;
+                    }
                 }
             }
         }
+
+        println!("Time elapsed: {}, Dupes found: {}", now.elapsed().as_secs(), num_dupes);
+    } else {
+        println!("No directory specified");
     }
 }
